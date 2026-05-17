@@ -54,27 +54,35 @@
         api.app.app.registerExtension({
             name: "URLModelDownloader",
             async setup() {
+                var bar = document.createElement("div");
+                bar.style.cssText = [
+                    "position:fixed", "top:10px", "right:10px", "z-index:9999",
+                    "display:flex", "gap:6px"
+                ].join(";");
+
                 const btnModel = document.createElement("button");
-                btnModel.textContent = "⬇ Download Model by URL";
+                btnModel.textContent = "⬇ Model";
+                btnModel.title = "Download Model by URL";
                 btnModel.style.cssText = [
-                    "position:fixed", "bottom:20px", "right:20px", "z-index:9999",
                     "background:#1e88e5", "color:white", "border:none", "border-radius:6px",
-                    "padding:8px 14px", "font-size:13px", "cursor:pointer",
-                    "box-shadow:0 2px 8px rgba(0,0,0,0.4)"
+                    "padding:6px 12px", "font-size:12px", "cursor:pointer",
+                    "box-shadow:0 2px 6px rgba(0,0,0,0.4)"
                 ].join(";");
                 btnModel.onclick = () => showDialog();
-                document.body.appendChild(btnModel);
 
                 const btnWorkflow = document.createElement("button");
-                btnWorkflow.textContent = "⬇ Download Workflow";
+                btnWorkflow.textContent = "⬇ Workflow";
+                btnWorkflow.title = "Download Workflow (JSON or ZIP)";
                 btnWorkflow.style.cssText = [
-                    "position:fixed", "bottom:56px", "right:20px", "z-index:9999",
                     "background:#7b1fa2", "color:white", "border:none", "border-radius:6px",
-                    "padding:8px 14px", "font-size:13px", "cursor:pointer",
-                    "box-shadow:0 2px 8px rgba(0,0,0,0.4)"
+                    "padding:6px 12px", "font-size:12px", "cursor:pointer",
+                    "box-shadow:0 2px 6px rgba(0,0,0,0.4)"
                 ].join(";");
                 btnWorkflow.onclick = () => showWorkflowDialog();
-                document.body.appendChild(btnWorkflow);
+
+                bar.appendChild(btnModel);
+                bar.appendChild(btnWorkflow);
+                document.body.appendChild(bar);
 
                 console.log("[URLDownloader] Buttons added.");
             }
