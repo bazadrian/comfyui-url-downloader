@@ -54,17 +54,29 @@
         api.app.app.registerExtension({
             name: "URLModelDownloader",
             async setup() {
-                const btn = document.createElement("button");
-                btn.textContent = "⬇ Download Model by URL";
-                btn.style.cssText = [
+                const btnModel = document.createElement("button");
+                btnModel.textContent = "⬇ Download Model by URL";
+                btnModel.style.cssText = [
                     "position:fixed", "bottom:20px", "right:20px", "z-index:9999",
                     "background:#1e88e5", "color:white", "border:none", "border-radius:6px",
                     "padding:8px 14px", "font-size:13px", "cursor:pointer",
                     "box-shadow:0 2px 8px rgba(0,0,0,0.4)"
                 ].join(";");
-                btn.onclick = () => showDialog();
-                document.body.appendChild(btn);
-                console.log("[URLDownloader] Button added.");
+                btnModel.onclick = () => showDialog();
+                document.body.appendChild(btnModel);
+
+                const btnWorkflow = document.createElement("button");
+                btnWorkflow.textContent = "⬇ Download Workflow";
+                btnWorkflow.style.cssText = [
+                    "position:fixed", "bottom:56px", "right:20px", "z-index:9999",
+                    "background:#7b1fa2", "color:white", "border:none", "border-radius:6px",
+                    "padding:8px 14px", "font-size:13px", "cursor:pointer",
+                    "box-shadow:0 2px 8px rgba(0,0,0,0.4)"
+                ].join(";");
+                btnWorkflow.onclick = () => showWorkflowDialog();
+                document.body.appendChild(btnWorkflow);
+
+                console.log("[URLDownloader] Buttons added.");
             }
         });
     }
@@ -238,6 +250,104 @@
                     }
                 }).catch(function () { clearInterval(interval); });
         }, 1500);
+    }
+
+    function showWorkflowDialog() {
+        var overlay = document.createElement("div");
+        overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center";
+
+        var dialog = document.createElement("div");
+        dialog.style.cssText = "background:#1a1a2e;color:#eee;border-radius:10px;padding:28px;width:500px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.6);font-family:sans-serif";
+
+        dialog.innerHTML =
+            '<h2 style="margin:0 0 8px;font-size:16px;color:#ce93d8">⬇ Download Workflow</h2>' +
+            '<p style="font-size:11px;color:#888;margin:0 0 16px">Acepta .json o .zip (se extrae automáticamente a workflows/)</p>' +
+            '<label style="font-size:12px;color:#aaa">URL del workflow</label>' +
+            '<input id="wfd-url" type="text" placeholder="https://github.com/.../workflow.zip"' +
+            ' style="width:100%;box-sizing:border-box;margin:4px 0 20px;padding:8px 10px;background:#0d0d1a;border:1px solid #444;border-radius:5px;color:#eee;font-size:13px"/>' +
+            '<div id="wfd-status" style="font-size:12px;color:#aaa;min-height:18px;margin-bottom:14px"></div>' +
+            '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+            '<button id="wfd-cancel" style="padding:8px 18px;background:#333;color:#eee;border:none;border-radius:5px;cursor:pointer">Cancelar</button>' +
+            '<button id="wfd-start" style="padding:8px 18px;background:#7b1fa2;color:white;border:none;border-radius:5px;cursor:pointer">⬇ Descargar</button>' +
+            "</div>";
+
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        var urlInput = dialog.querySelector("#wfd-url");
+        var statusDiv = dialog.querySelector("#wfd-status");
+        var startBtn = dialog.querySelector("#wfd-start");
+        var cancelBtn = dialog.querySelector("#wfd-cancel");
+
+        cancelBtn.onclick = function () { overlay.remove(); };
+        overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+
+        startBtn.onclick = function () {
+            var url = urlInput.value.trim();
+            if (!url) {
+                statusDiv.textContent = "⚠ URL es obligatoria.";
+                statusDiv.style.color = "#f44";
+                return;
+            }
+            startBtn.disabled = true;
+            startBtn.textContent = "⏳ Descargando...";
+            cancelBtn.disabled = true;
+            statusDiv.style.color = "#ce93d8";
+            statusDiv.textContent = "Iniciando...";
+
+            fetch("/model_downloader/download_workflow", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url })
+            }).then(function (res) {
+                return res.json();
+            }).then(function (data) {
+                if (data.error) {
+                    statusDiv.textContent = "Error: " + data.error;
+                    statusDiv.style.color = "#f44";
+                    startBtn.disabled = false;
+                    startBtn.textContent = "⬇ Descargar";
+                    cancelBtn.disabled = false;
+                    return;
+                }
+                var id = data.id;
+                var interval = setInterval(function () {
+                    fetch("/model_downloader/progress?id=" + encodeURIComponent(id))
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (d.status === "downloading") {
+                                statusDiv.textContent = "Descargando... " + d.progress + "%";
+                                statusDiv.style.color = "#ce93d8";
+                            } else if (d.status === "done") {
+                                clearInterval(interval);
+                                var files = d.files || [];
+                                statusDiv.innerHTML = "✓ <b>" + d.count + " archivo(s)</b> guardados en workflows/:<br>" +
+                                    '<span style="font-size:11px;color:#aaa">' + files.join(", ") + "</span>";
+                                statusDiv.style.color = "#4caf50";
+                                startBtn.textContent = "✓ Listo";
+                                startBtn.style.background = "#2e7d32";
+                                cancelBtn.textContent = "Cerrar";
+                                cancelBtn.disabled = false;
+                            } else if (d.status === "error") {
+                                clearInterval(interval);
+                                statusDiv.textContent = "Error: " + d.error;
+                                statusDiv.style.color = "#f44";
+                                startBtn.disabled = false;
+                                startBtn.textContent = "⬇ Reintentar";
+                                cancelBtn.disabled = false;
+                            }
+                        }).catch(function () { clearInterval(interval); });
+                }, 1000);
+            }).catch(function (e) {
+                statusDiv.textContent = "Error: " + e.message;
+                statusDiv.style.color = "#f44";
+                startBtn.disabled = false;
+                startBtn.textContent = "⬇ Descargar";
+                cancelBtn.disabled = false;
+            });
+        };
+
+        urlInput.focus();
     }
 
     function escHtml(s) {
