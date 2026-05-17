@@ -29,18 +29,37 @@ def _get_remote_size(url, hf_token):
 
 def _do_download(download_id, url, dest_path, hf_token):
     import urllib.request
+    import urllib.error
 
     existing = os.path.getsize(dest_path) if os.path.exists(dest_path) else 0
     download_status[download_id] = {"status": "downloading", "progress": 0, "error": None}
 
-    try:
+    def _attempt(resume_from):
         req = urllib.request.Request(url)
         if hf_token and "huggingface.co" in url:
             req.add_header("Authorization", f"Bearer {hf_token}")
-        if existing:
-            req.add_header("Range", f"bytes={existing}-")
+        if resume_from:
+            req.add_header("Range", f"bytes={resume_from}-")
+        return urllib.request.urlopen(req), resume_from
 
-        with urllib.request.urlopen(req) as response:
+    try:
+        try:
+            response, offset = _attempt(existing)
+        except urllib.error.HTTPError as e:
+            if e.code == 416:
+                # Our local file is >= server file size — check if already complete
+                remote_size = _get_remote_size(url, hf_token)
+                actual = os.path.getsize(dest_path)
+                if remote_size and actual == remote_size:
+                    download_status[download_id] = {"status": "done", "progress": 100, "error": None, "size": actual}
+                    return
+                # Size mismatch — delete and restart
+                os.remove(dest_path)
+                response, offset = _attempt(0)
+            else:
+                raise
+
+        with response:
             content_range = response.headers.get("Content-Range", "")
             content_length = int(response.headers.get("Content-Length", 0))
 
@@ -48,11 +67,11 @@ def _do_download(download_id, url, dest_path, hf_token):
                 total = int(content_range.split("/")[-1])
             else:
                 total = content_length
-                existing = 0
+                offset = 0
 
-            downloaded = existing
+            downloaded = offset
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-            mode = "ab" if existing else "wb"
+            mode = "ab" if offset else "wb"
             with open(dest_path, mode) as f:
                 while True:
                     chunk = response.read(1024 * 1024)
